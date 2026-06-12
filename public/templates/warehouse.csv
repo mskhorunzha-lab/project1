@@ -1,0 +1,3 @@
+item_id,name,category,model,unit,condition,location,quantity,min_quantity,reorder_point,emergency_reserve
+ZIP-001,АКБ 12В 9Ач,АКБ,12V 9Ah,шт,Новое,Склад-1/Полка-2,12,20,25,10
+ZIP-002,БП 12В 3А,Блок питания,12V 3A,шт,Новое,Склад-1/Полка-3,3,10,15,5

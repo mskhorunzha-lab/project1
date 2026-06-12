@@ -1,0 +1,3 @@
+equipment_id,type,system,name,model,serial_number,location,status,criticality,last_maintenance,next_maintenance
+UPS-001,ИБП,Электропитание,ИБП шкаф СКС-12,APC SMT1500,AS12345,"Корпус 1, этаж 2",Исправно,Высокая,2024-11-10,2025-05-10
+ACS-DOOR-001,Дверь,СКУД,Дверь КПП-1,—,—,КПП-1,Исправно,Высокая,2024-12-01,2025-03-01

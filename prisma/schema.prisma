@@ -1,0 +1,336 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MANAGER
+  LEAD_SPECIALIST
+  SPECIALIST
+  WAREHOUSE
+  DISPATCHER
+  CONTRACTOR
+  ADMIN
+}
+
+enum EquipmentSystem {
+  UPS
+  ACS
+  CCTV
+  LAN
+  HVAC
+  TELECOM
+  OTHER
+}
+
+enum EquipmentType {
+  UPS
+  ACS_DOOR
+  CAMERA
+  CABINET
+  CONDITIONER
+  SWITCH
+  OTHER
+}
+
+enum Criticality {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum EquipmentStatus {
+  OK
+  FAULTY
+  LIMITED
+  DECOMMISSIONED
+}
+
+enum WorkType {
+  TICKET
+  MAINTENANCE
+  REPAIR
+  INSPECTION
+  INSTALLATION
+  PROJECT
+  CONTRACTOR
+  DOCUMENTATION
+  PURCHASE
+  WAREHOUSE
+  ORGANIZATIONAL
+}
+
+enum Priority {
+  P1
+  P2
+  P3
+  P4
+  PLANNED
+}
+
+enum WorkStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_ACCESS
+  WAITING_MATERIALS
+  WAITING_CONTRACTOR
+  WAITING_APPROVAL
+  DONE
+  ON_REVIEW
+  CLOSED
+  CANCELLED
+}
+
+enum MovementType {
+  RECEIPT
+  ISSUE
+  WRITE_OFF
+  RETURN
+  REMOVAL
+  TO_GOOD
+  TO_FAULTY
+  RESERVE
+  DISPOSAL
+}
+
+enum ItemCondition {
+  NEW
+  USED_OK
+  USED_FAULTY
+  WARRANTY
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      UserRole @default(SPECIALIST)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  leadWorks      Work[] @relation("LeadSpecialist")
+  assignedWorks  Work[] @relation("Assignee")
+  movementsGiven WarehouseMovement[] @relation("GivenBy")
+  movementsTaken WarehouseMovement[] @relation("TakenBy")
+  importLogs     ImportLog[]
+}
+
+model Equipment {
+  id              String          @id @default(cuid())
+  externalId      String?         @unique
+  type            EquipmentType
+  system          EquipmentSystem
+  name            String
+  manufacturer    String?
+  model           String?
+  serialNumber    String?
+  inventoryNumber String?
+  location        String
+  criticality     Criticality     @default(MEDIUM)
+  status          EquipmentStatus @default(OK)
+  commissionedAt  DateTime?
+  warrantyUntil   DateTime?
+  supplier        String?
+  regulationId    String?
+  lastMaintenance DateTime?
+  nextMaintenance DateTime?
+  responsibleId   String?
+  qrCode          String?         @unique
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  regulation  MaintenanceRegulation? @relation(fields: [regulationId], references: [id])
+  upsDetails  UpsDetails?
+  acsDetails  AcsDetails?
+  works       Work[]
+  movements   WarehouseMovement[]
+
+  @@index([system, type])
+  @@index([location])
+}
+
+model UpsDetails {
+  id              String   @id @default(cuid())
+  equipmentId     String   @unique
+  powerVA         Int?
+  loadPercent     Float?
+  batteryInstalled DateTime?
+  batteryType     String?
+  batteryCount    Int?
+  lastAutonomyTest DateTime?
+  autonomyResult  String?
+  batteryStatus   String?
+  connectedTo     String?
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+}
+
+model AcsDetails {
+  id            String  @id @default(cuid())
+  equipmentId   String  @unique
+  readerModel   String?
+  readerSide    String?
+  lockType      String?
+  exitButton    Boolean @default(false)
+  doorCloser    String?
+  controller    String?
+  powerSupply   String?
+  batteryDate   DateTime?
+  batteryStatus String?
+  networkPoint  String?
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+}
+
+model MaintenanceRegulation {
+  id              String          @id @default(cuid())
+  name            String
+  system          EquipmentSystem
+  equipmentType   EquipmentType
+  intervalDays    Int
+  checklistType   String
+  active          Boolean         @default(true)
+
+  equipment Equipment[]
+}
+
+model Work {
+  id                String     @id @default(cuid())
+  number            String     @unique
+  serviceDeskTicket String?
+  type              WorkType
+  category          String
+  system            EquipmentSystem
+  equipmentId       String?
+  priority          Priority   @default(P3)
+  leadSpecialistId  String?
+  assigneeId        String?
+  plannedDate       DateTime
+  actualDate        DateTime?
+  status            WorkStatus @default(NEW)
+  waitReason        String?
+  title             String
+  description       String?
+  result            String?
+  needsPurchase     Boolean    @default(false)
+  needsRework       Boolean    @default(false)
+  recommendations   String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  equipment  Equipment? @relation(fields: [equipmentId], references: [id])
+  leadSpecialist User?  @relation("LeadSpecialist", fields: [leadSpecialistId], references: [id])
+  assignee       User?  @relation("Assignee", fields: [assigneeId], references: [id])
+  checklist      ChecklistResponse?
+  movements      WarehouseMovement[]
+  materials      WorkMaterial[]
+
+  @@index([status, plannedDate])
+  @@index([type])
+}
+
+model WorkMaterial {
+  id       String  @id @default(cuid())
+  workId   String
+  itemId   String
+  quantity Float
+  notes    String?
+
+  work Work          @relation(fields: [workId], references: [id], onDelete: Cascade)
+  item WarehouseItem @relation(fields: [itemId], references: [id])
+}
+
+model ChecklistResponse {
+  id        String   @id @default(cuid())
+  workId    String   @unique
+  type      String
+  items     Json
+  summary   Json?
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+}
+
+model WarehouseItem {
+  id               String        @id @default(cuid())
+  externalId       String?       @unique
+  name             String
+  category         String
+  manufacturer     String?
+  model            String?
+  unit             String        @default("шт")
+  condition        ItemCondition @default(NEW)
+  storageLocation  String
+  quantity         Float         @default(0)
+  minQuantity      Float         @default(0)
+  reorderPoint     Float         @default(0)
+  emergencyReserve Float         @default(0)
+  leadTimeDays     Int           @default(90)
+  supplier         String?
+  analogs          String?
+  criticality      Criticality   @default(MEDIUM)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  movements WarehouseMovement[]
+  materials WorkMaterial[]
+
+  @@index([category])
+}
+
+model WarehouseMovement {
+  id                String       @id @default(cuid())
+  date              DateTime     @default(now())
+  itemId            String
+  quantity          Float
+  type              MovementType
+  basis             String?
+  serviceDeskTicket String?
+  equipmentId       String?
+  workId            String?
+  takenById         String?
+  givenById         String?
+  comment           String?
+  createdAt         DateTime     @default(now())
+
+  item      WarehouseItem @relation(fields: [itemId], references: [id])
+  equipment Equipment?    @relation(fields: [equipmentId], references: [id])
+  work      Work?         @relation(fields: [workId], references: [id])
+  takenBy   User?         @relation("TakenBy", fields: [takenById], references: [id])
+  givenBy   User?         @relation("GivenBy", fields: [givenById], references: [id])
+
+  @@index([date])
+  @@index([type])
+}
+
+model ImportLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  fileName   String
+  dataType   String
+  totalRows  Int
+  successRows Int
+  errorRows  Int
+  errors     Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+}
