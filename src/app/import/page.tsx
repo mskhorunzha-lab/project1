@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/PageHeader";
 import { ImportForm } from "@/components/ImportForm";
@@ -5,8 +6,12 @@ import { formatDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+type ImportLogWithUser = Prisma.ImportLogGetPayload<{
+  include: { user: true };
+}>;
+
 export default async function ImportPage() {
-  let logs: Awaited<ReturnType<typeof prisma.importLog.findMany>> = [];
+  let logs: ImportLogWithUser[] = [];
   try {
     logs = await prisma.importLog.findMany({
       include: { user: true },
