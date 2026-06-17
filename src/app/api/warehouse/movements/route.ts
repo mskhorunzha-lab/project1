@@ -1,70 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { MovementType } from "@prisma/client";
-
-const OUTBOUND: MovementType[] = ["ISSUE", "WRITE_OFF", "DISPOSAL", "REMOVAL"];
+import { authorize } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
+import { createWarehouseMovementSchema, formatZodError } from "@/lib/validation";
+import {
+  isOutboundMovement,
+  movementDelta,
+  movementRequiresBasis,
+} from "@/lib/services/warehouse";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const {
-    itemId,
-    type,
-    quantity: qtyStr,
-    basis,
-    workId,
-    equipmentId,
-    takenById,
-    comment,
-  } = body;
+  const auth = await authorize(req, ["WAREHOUSE", "LEAD_SPECIALIST", "MANAGER"]);
+  if (!auth.ok) return auth.response;
 
-  const quantity = parseFloat(qtyStr);
-  if (!itemId || !type || !quantity || quantity <= 0) {
-    return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 });
+  const parsed = createWarehouseMovementSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
 
-  if (["WRITE_OFF", "ISSUE"].includes(type) && !workId && !basis) {
+  const data = parsed.data;
+  if (movementRequiresBasis(data.type) && !data.workId && !data.basis) {
     return NextResponse.json(
       { error: "Списание требует основания — работа или номер задачи" },
       { status: 400 }
     );
   }
 
-  const item = await prisma.warehouseItem.findUnique({ where: { id: itemId } });
-  if (!item) {
-    return NextResponse.json({ error: "Позиция не найдена" }, { status: 404 });
-  }
+  try {
+    const movement = await prisma.$transaction(async (tx) => {
+      const item = await tx.warehouseItem.findUnique({ where: { id: data.itemId } });
+      if (!item) {
+        throw new Error("Позиция не найдена");
+      }
 
-  if (OUTBOUND.includes(type as MovementType) && item.quantity < quantity) {
+      if (isOutboundMovement(data.type) && item.quantity < data.quantity) {
+        throw new Error(`Недостаточно остатка (доступно: ${item.quantity})`);
+      }
+
+      const created = await tx.warehouseMovement.create({
+        data: {
+          itemId: data.itemId,
+          quantity: data.quantity,
+          type: data.type,
+          basis: data.basis,
+          workId: data.workId,
+          equipmentId: data.equipmentId,
+          takenById: data.takenById,
+          givenById: auth.user.id,
+          comment: data.comment,
+        },
+      });
+
+      await tx.warehouseItem.update({
+        where: { id: data.itemId },
+        data: { quantity: { increment: movementDelta(data.type, data.quantity) } },
+      });
+
+      await writeAuditLog(
+        {
+          userId: auth.user.id,
+          action: "WAREHOUSE_MOVEMENT_CREATED",
+          entity: "WarehouseMovement",
+          entityId: created.id,
+          details: {
+            itemId: data.itemId,
+            type: data.type,
+            quantity: data.quantity,
+          },
+        },
+        tx
+      );
+
+      return created;
+    });
+
+    return NextResponse.json(movement);
+  } catch (e) {
     return NextResponse.json(
-      { error: `Недостаточно остатка (доступно: ${item.quantity})` },
+      { error: e instanceof Error ? e.message : "Ошибка складской операции" },
       { status: 400 }
     );
   }
-
-  const delta = type === "RECEIPT" || type === "RETURN" || type === "TO_GOOD"
-    ? quantity
-    : OUTBOUND.includes(type as MovementType)
-      ? -quantity
-      : 0;
-
-  const [movement] = await prisma.$transaction([
-    prisma.warehouseMovement.create({
-      data: {
-        itemId,
-        quantity,
-        type: type as MovementType,
-        basis: basis || undefined,
-        workId: workId || undefined,
-        equipmentId: equipmentId || undefined,
-        takenById: takenById || undefined,
-        comment: comment || undefined,
-      },
-    }),
-    prisma.warehouseItem.update({
-      where: { id: itemId },
-      data: { quantity: { increment: delta } },
-    }),
-  ]);
-
-  return NextResponse.json(movement);
 }

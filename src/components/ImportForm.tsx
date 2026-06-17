@@ -17,6 +17,7 @@ export function ImportForm({
     success: number;
     errors: { row: number; message: string }[];
   } | null>(null);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,6 +27,7 @@ export function ImportForm({
 
     setLoading(true);
     setResult(null);
+    setError("");
 
     const fd = new FormData();
     fd.append("file", fileInput.files[0]);
@@ -34,6 +36,10 @@ export function ImportForm({
     try {
       const res = await fetch("/api/import", { method: "POST", body: fd });
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Ошибка импорта");
+        return;
+      }
       setResult(data);
       if (data.success > 0) router.refresh();
     } finally {
@@ -51,7 +57,7 @@ export function ImportForm({
         <input
           name="file"
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx"
           className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-brand-700"
           required
         />
@@ -59,6 +65,7 @@ export function ImportForm({
           {loading ? "Импорт..." : "Загрузить и импортировать"}
         </button>
       </form>
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {result && (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
           <p className="font-medium text-green-700">Загружено: {result.success} строк</p>

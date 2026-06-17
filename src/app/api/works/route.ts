@@ -1,50 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { generateWorkNumber } from "@/lib/utils";
-import type { WorkType, Priority, EquipmentSystem, WorkStatus } from "@prisma/client";
+import { authorize } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
+import { createWorkSchema, formatZodError } from "@/lib/validation";
+import { createWorkWithGeneratedNumber } from "@/lib/services/work-number";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const {
-    title,
-    type,
-    category,
-    system,
-    priority,
-    equipmentId,
-    serviceDeskTicket,
-    leadSpecialistId,
-    assigneeId,
-    plannedDate,
-    description,
-  } = body;
+  const auth = await authorize(req, ["DISPATCHER", "LEAD_SPECIALIST", "MANAGER"]);
+  if (!auth.ok) return auth.response;
 
-  if (!title || !type || !category || !system || !plannedDate) {
-    return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 });
+  const parsed = createWorkSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
 
-  const count = await prisma.work.count();
-  const number = generateWorkNumber(count + 1);
+  const data = parsed.data;
+  const status = data.assigneeId ? "ASSIGNED" : "NEW";
 
-  let status: WorkStatus = "NEW";
-  if (assigneeId) status = "ASSIGNED";
+  const work = await createWorkWithGeneratedNumber({
+    title: data.title,
+    type: data.type,
+    category: data.category,
+    system: data.system,
+    priority: data.priority,
+    equipmentId: data.equipmentId,
+    serviceDeskTicket: data.serviceDeskTicket,
+    leadSpecialistId: data.leadSpecialistId,
+    assigneeId: data.assigneeId,
+    plannedDate: new Date(data.plannedDate),
+    description: data.description,
+    status,
+  });
 
-  const work = await prisma.work.create({
-    data: {
-      number,
-      title,
-      type: type as WorkType,
-      category,
-      system: system as EquipmentSystem,
-      priority: (priority as Priority) ?? "P3",
-      equipmentId: equipmentId || undefined,
-      serviceDeskTicket: serviceDeskTicket || undefined,
-      leadSpecialistId: leadSpecialistId || undefined,
-      assigneeId: assigneeId || undefined,
-      plannedDate: new Date(plannedDate),
-      description: description || undefined,
-      status,
-    },
+  await writeAuditLog({
+    userId: auth.user.id,
+    action: "WORK_CREATED",
+    entity: "Work",
+    entityId: work.id,
+    details: { number: work.number, status: work.status },
   });
 
   return NextResponse.json(work);

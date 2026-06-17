@@ -1,6 +1,6 @@
 import { addDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
-import { generateWorkNumber } from "@/lib/utils";
+import { createWorkWithGeneratedNumber } from "@/lib/services/work-number";
 
 export async function generateMaintenanceWorks(): Promise<number> {
   const today = new Date();
@@ -17,7 +17,6 @@ export async function generateMaintenanceWorks(): Promise<number> {
   });
 
   let created = 0;
-  const workCount = await prisma.work.count();
 
   for (const eq of equipment) {
     if (!eq.regulation) continue;
@@ -32,21 +31,17 @@ export async function generateMaintenanceWorks(): Promise<number> {
     if (existing) continue;
 
     const plannedDate = eq.nextMaintenance ?? addDays(today, 7);
-    const number = generateWorkNumber(workCount + created + 1);
 
-    await prisma.work.create({
-      data: {
-        number,
-        type: "MAINTENANCE",
-        category: `Плановое ТО — ${eq.regulation.name}`,
-        system: eq.system,
-        equipmentId: eq.id,
-        priority: "PLANNED",
-        plannedDate,
-        status: "NEW",
-        title: `ТО: ${eq.name}`,
-        description: `Автоматически создано по регламенту «${eq.regulation.name}»`,
-      },
+    await createWorkWithGeneratedNumber({
+      type: "MAINTENANCE",
+      category: `Плановое ТО — ${eq.regulation.name}`,
+      system: eq.system,
+      equipmentId: eq.id,
+      priority: "PLANNED",
+      plannedDate,
+      status: "NEW",
+      title: `ТО: ${eq.name}`,
+      description: `Автоматически создано по регламенту «${eq.regulation.name}»`,
     });
     created++;
   }

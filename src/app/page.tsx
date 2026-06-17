@@ -47,9 +47,11 @@ export default async function DashboardPage() {
         title="Дашборд"
         description="Управляемый контур: ИБП, СКУД, критичный ЗИП, ТО, журнал работ"
         actions={
-          <Link href="/maintenance/generate" className="btn-primary">
-            Создать задачи ТО
-          </Link>
+          <form action="/maintenance/generate" method="post">
+            <button type="submit" className="btn-primary">
+              Создать задачи ТО
+            </button>
+          </form>
         }
       />
 
