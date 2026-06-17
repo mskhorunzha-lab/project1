@@ -34,9 +34,11 @@ export default async function MaintenancePage() {
         title="Плановое ТО"
         description="Графики обслуживания, автосоздание задач, чек-листы"
         actions={
-          <Link href="/maintenance/generate" className="btn-primary">
-            Создать задачи ТО
-          </Link>
+          <form action="/maintenance/generate" method="post">
+            <button type="submit" className="btn-primary">
+              Создать задачи ТО
+            </button>
+          </form>
         }
       />
 

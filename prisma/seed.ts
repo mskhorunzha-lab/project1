@@ -14,8 +14,12 @@ async function main() {
   await prisma.warehouseItem.deleteMany();
   await prisma.maintenanceRegulation.deleteMany();
   await prisma.importLog.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.user.deleteMany();
 
+  await prisma.user.create({
+    data: { email: "admin@corp.local", name: "Администратор", role: "ADMIN" },
+  });
   const manager = await prisma.user.create({
     data: { email: "manager@corp.local", name: "Сидоров А.В.", role: "MANAGER" },
   });

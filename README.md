@@ -17,6 +17,25 @@ MVP web-портала (portal v.0) по концепции управления
 - Node.js 18+
 - Docker (для PostgreSQL) или существующая БД PostgreSQL
 
+## Cloud Agent без Docker
+
+В среде Cursor Cloud Agent Docker может быть недоступен. Для такого случая в
+репозитории есть idempotent setup-скрипт, который устанавливает PostgreSQL через
+`apt-get`, запускает локальный service/cluster, создаёт роль `infra`, базу
+`infra_portal`, обновляет `.env` и проверяет подключение:
+
+```bash
+npm run cloud:setup-db
+npm run db:push
+npm run db:seed
+```
+
+Ожидаемый `DATABASE_URL`:
+
+```env
+DATABASE_URL="postgresql://infra:infra@localhost:5432/infra_portal?schema=public"
+```
+
 ## Быстрый старт
 
 ```bash
@@ -59,8 +78,46 @@ npm run dev
 Поддерживается:
 - UTF-8 и Windows-1251
 - Разделители `;` и `,`
-- XLSX/XLS
+- XLSX
 - Upsert по external ID
+- Ограничение размера файла: 5 МБ
+- Ограничение строк: 5000
+
+Формат XLS больше не принимается в целях безопасности. Для Excel-файлов используйте XLSX.
+
+## Безопасность и аудит
+
+Мутации API защищены проверкой роли пользователя. Для production-запросов нужно
+передавать один из идентификаторов текущего пользователя:
+
+- cookie `infra_user_id`
+- header `x-user-id`
+- header `x-user-email`
+
+Для локального/demo режима можно задать `INFRA_PORTAL_DEFAULT_USER_EMAIL` в `.env`.
+Если переменная не задана, в непроизводственной среде будет выбран первый активный
+пользователь с ролью `ADMIN` или `MANAGER`.
+
+Все критичные мутации пишут события в `AuditLog`:
+
+- создание оборудования
+- создание и смена статуса работ
+- сохранение чек-листов
+- генерация задач ТО
+- складские движения
+- импорт данных
+
+## Проверки качества
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+В репозитории добавлен GitHub Actions workflow `.github/workflows/ci.yml`, который
+запускает Prisma validation, typecheck, lint, тесты и production build.
 
 ## Связь с концепцией
 

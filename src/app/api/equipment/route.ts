@@ -1,42 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { EquipmentType, EquipmentSystem, EquipmentStatus, Criticality } from "@prisma/client";
+import { authorize } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
+import { createEquipmentSchema, formatZodError } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const {
-    name,
-    type,
-    system,
-    location,
-    manufacturer,
-    model,
-    serialNumber,
-    externalId,
-    status,
-    criticality,
-    regulationId,
-  } = body;
+  const auth = await authorize(req, ["LEAD_SPECIALIST", "MANAGER"]);
+  if (!auth.ok) return auth.response;
 
-  if (!name || !type || !system || !location) {
-    return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 });
+  const parsed = createEquipmentSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
 
+  const data = parsed.data;
   const equipment = await prisma.equipment.create({
     data: {
-      name,
-      type: type as EquipmentType,
-      system: system as EquipmentSystem,
-      location,
-      manufacturer: manufacturer || undefined,
-      model: model || undefined,
-      serialNumber: serialNumber || undefined,
-      externalId: externalId || undefined,
-      status: (status as EquipmentStatus) ?? "OK",
-      criticality: (criticality as Criticality) ?? "MEDIUM",
-      regulationId: regulationId || undefined,
-      qrCode: externalId ? `QR-${externalId}` : undefined,
+      name: data.name,
+      type: data.type,
+      system: data.system,
+      location: data.location,
+      manufacturer: data.manufacturer,
+      model: data.model,
+      serialNumber: data.serialNumber,
+      externalId: data.externalId,
+      status: data.status,
+      criticality: data.criticality,
+      regulationId: data.regulationId,
+      qrCode: data.externalId ? `QR-${data.externalId}` : undefined,
     },
+  });
+
+  await writeAuditLog({
+    userId: auth.user.id,
+    action: "EQUIPMENT_CREATED",
+    entity: "Equipment",
+    entityId: equipment.id,
+    details: { externalId: equipment.externalId, system: equipment.system },
   });
 
   return NextResponse.json(equipment);

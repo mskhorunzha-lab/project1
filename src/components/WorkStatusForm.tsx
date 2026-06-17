@@ -19,10 +19,12 @@ export function WorkStatusForm({
   const [waitReason, setWaitReason] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       const res = await fetch(`/api/works/${workId}`, {
         method: "PATCH",
@@ -33,7 +35,12 @@ export function WorkStatusForm({
           result: ["DONE", "CLOSED", "ON_REVIEW"].includes(status) ? result : undefined,
         }),
       });
-      if (res.ok) router.refresh();
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Ошибка обновления статуса");
+        return;
+      }
+      router.refresh();
     } finally {
       setLoading(false);
     }
@@ -67,6 +74,7 @@ export function WorkStatusForm({
           className="input min-h-[80px]"
         />
       )}
+      {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" className="btn-primary w-full" disabled={loading}>
         {loading ? "Сохранение..." : "Обновить"}
       </button>
