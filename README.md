@@ -17,6 +17,25 @@ MVP web-портала (portal v.0) по концепции управления
 - Node.js 18+
 - Docker (для PostgreSQL) или существующая БД PostgreSQL
 
+## Cloud Agent без Docker
+
+В среде Cursor Cloud Agent Docker может быть недоступен. Для такого случая в
+репозитории есть idempotent setup-скрипт, который устанавливает PostgreSQL через
+`apt-get`, запускает локальный service/cluster, создаёт роль `infra`, базу
+`infra_portal`, обновляет `.env` и проверяет подключение:
+
+```bash
+npm run cloud:setup-db
+npm run db:push
+npm run db:seed
+```
+
+Ожидаемый `DATABASE_URL`:
+
+```env
+DATABASE_URL="postgresql://infra:infra@localhost:5432/infra_portal?schema=public"
+```
+
 ## Быстрый старт
 
 ```bash
